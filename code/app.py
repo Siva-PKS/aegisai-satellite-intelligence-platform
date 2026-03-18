@@ -23,11 +23,28 @@ body {
 
 /* Metric cards */
 .metric-box {
-    background-color: #1c1f26;
-    padding: 15px;
-    border-radius: 10px;
+    background-color: #2563eb;
+    padding: 18px;
+    border-radius: 12px;
     text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: white;
+    box-shadow: 0px 4px 12px rgba(37, 99, 235, 0.4);
 }
+/* Different colors */
+.objects {
+    background: linear-gradient(135deg, #2563eb, #1e3a8a);
+}
+
+.risk {
+    background: linear-gradient(135deg, #dc2626, #7f1d1d);
+}
+
+.time {
+    background: linear-gradient(135deg, #059669, #064e3b);
+}
+
 
 /* 🔥 Buttons (Premium Blue) */
 div.stButton > button {
