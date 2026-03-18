@@ -5,3 +5,6 @@ pillow
 faiss-cpu
 sentence-transformers
 anthropic
+ultralytics
+torch
+torchvision
