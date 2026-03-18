@@ -7,11 +7,13 @@ from sentence_transformers import SentenceTransformer
 import anthropic
 
 # -------------------------------
-# Page Config (Dark Dashboard)
+# Page Config
 # -------------------------------
 st.set_page_config(page_title="AI Satellite Dashboard", layout="wide")
 
-# Custom CSS (Palantir style)
+# -------------------------------
+# UI Styling
+# -------------------------------
 st.markdown("""
 <style>
 
@@ -23,30 +25,27 @@ body {
 
 /* Metric cards */
 .metric-box {
-    background-color: #2563eb;
     padding: 18px;
     border-radius: 12px;
     text-align: center;
     font-size: 18px;
     font-weight: bold;
     color: white;
-    box-shadow: 0px 4px 12px rgba(37, 99, 235, 0.4);
+    box-shadow: 0px 4px 12px rgba(0,0,0,0.4);
 }
+
 /* Different colors */
 .objects {
     background: linear-gradient(135deg, #2563eb, #1e3a8a);
 }
-
 .risk {
     background: linear-gradient(135deg, #dc2626, #7f1d1d);
 }
-
 .time {
     background: linear-gradient(135deg, #059669, #064e3b);
 }
 
-
-/* 🔥 Buttons (Premium Blue) */
+/* Buttons */
 div.stButton > button {
     background-color: #2563eb;
     color: white;
@@ -54,16 +53,12 @@ div.stButton > button {
     border: none;
     padding: 10px 18px;
     font-weight: 600;
-    transition: 0.3s;
 }
-
-/* Hover effect */
 div.stButton > button:hover {
     background-color: #1d4ed8;
-    color: white;
 }
 
-/* Sidebar button fix */
+/* Sidebar button */
 section[data-testid="stSidebar"] button {
     background-color: #2563eb !important;
     color: white !important;
@@ -73,9 +68,15 @@ section[data-testid="stSidebar"] button {
 """, unsafe_allow_html=True)
 
 # -------------------------------
-# Claude API
+# Claude API (SAFE)
 # -------------------------------
-client = anthropic.Anthropic(api_key="YOUR_API_KEY")
+api_key = st.secrets.get("ANTHROPIC_API_KEY")
+
+if not api_key:
+    st.warning("⚠️ Claude API key not configured. Showing demo mode.")
+    client = None
+else:
+    client = anthropic.Anthropic(api_key=api_key)
 
 # -------------------------------
 # RAG Setup
@@ -115,18 +116,25 @@ def retrieve_context(query):
     return "\n".join([documents[i] for i in I[0]])
 
 def ask_claude(context, query):
-    response = client.messages.create(
-        model="claude-3-sonnet-20240229",
-        max_tokens=300,
-        messages=[
-            {"role": "user",
-             "content": f"Context:\n{context}\n\nQuestion:\n{query}"}
-        ]
-    )
-    return response.content[0].text
+    if client is None:
+        return "⚠️ Demo Mode: Claude API not configured."
+
+    try:
+        response = client.messages.create(
+            model="claude-3-haiku-20240307",  # faster + safer
+            max_tokens=300,
+            messages=[
+                {"role": "user",
+                 "content": f"Context:\n{context}\n\nQuestion:\n{query}"}
+            ]
+        )
+        return response.content[0].text
+
+    except Exception as e:
+        return f"❌ Claude API Error: {str(e)}"
 
 # -------------------------------
-# Sidebar (Control Panel)
+# Sidebar
 # -------------------------------
 st.sidebar.title("🛰️ Control Panel")
 
@@ -141,15 +149,10 @@ st.title("🛰️ AI Satellite Intelligence Dashboard")
 
 col1, col2, col3 = st.columns(3)
 
-# Metrics placeholders
-with col1:
-    st.markdown('<div class="metric-box">📍 Objects: --</div>', unsafe_allow_html=True)
-
-with col2:
-    st.markdown('<div class="metric-box">⚠️ Risk Level: --</div>', unsafe_allow_html=True)
-
-with col3:
-    st.markdown('<div class="metric-box">⏱️ Response Time: --</div>', unsafe_allow_html=True)
+# Initial placeholders
+col1.markdown('<div class="metric-box objects">📍 Objects: --</div>', unsafe_allow_html=True)
+col2.markdown('<div class="metric-box risk">⚠️ Risk Level: --</div>', unsafe_allow_html=True)
+col3.markdown('<div class="metric-box time">⏱️ Response Time: --</div>', unsafe_allow_html=True)
 
 # -------------------------------
 # Processing
@@ -167,10 +170,12 @@ if uploaded_file:
             context = retrieve_context(" ".join(objects))
             response = ask_claude(context, query)
 
-        # Metrics Update
-        col1.metric("📍 Objects", len(objects))
-        col2.metric("⚠️ Risk Level", "High" if len(objects) > 2 else "Medium")
-        col3.metric("⏱️ Response", "2-5 sec")
+        # Dynamic metrics update
+        risk_level = "High" if len(objects) > 2 else "Medium"
+
+        col1.markdown(f'<div class="metric-box objects">📍 Objects: {len(objects)}</div>', unsafe_allow_html=True)
+        col2.markdown(f'<div class="metric-box risk">⚠️ Risk Level: {risk_level}</div>', unsafe_allow_html=True)
+        col3.markdown('<div class="metric-box time">⏱️ Response Time: 2-5 sec</div>', unsafe_allow_html=True)
 
         # Layout sections
         left, right = st.columns(2)
