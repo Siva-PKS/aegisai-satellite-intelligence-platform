@@ -5,6 +5,7 @@ pillow
 faiss-cpu
 sentence-transformers
 anthropic
+pandas
 ultralytics
 torch
 torchvision
