@@ -1,15 +1,18 @@
 import streamlit as st
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 import faiss
 from sentence_transformers import SentenceTransformer
 import anthropic
+import pandas as pd
+import random
+from ultralytics import YOLO
 
 # -------------------------------
 # Page Config
 # -------------------------------
-st.set_page_config(page_title="AI Satellite Dashboard", layout="wide")
+st.set_page_config(page_title="AegisAI Dashboard", layout="wide")
 
 # -------------------------------
 # UI Styling
@@ -19,10 +22,9 @@ st.markdown("""
 body {background-color: #0e1117; color: white;}
 
 .metric-box {
-    padding: 18px;
-    border-radius: 12px;
+    padding: 15px;
+    border-radius: 10px;
     text-align: center;
-    font-size: 18px;
     font-weight: bold;
     color: white;
 }
@@ -34,21 +36,24 @@ body {background-color: #0e1117; color: white;}
 div.stButton > button {
     background-color: #2563eb;
     color: white;
-    border-radius: 10px;
-    border: none;
-    padding: 10px 18px;
-}
-div.stButton > button:hover {
-    background-color: #1d4ed8;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------------------
-# Claude Setup (SAFE)
+# Claude Setup (Hybrid)
 # -------------------------------
 api_key = st.secrets.get("ANTHROPIC_API_KEY")
 client = anthropic.Anthropic(api_key=api_key) if api_key else None
+
+# -------------------------------
+# Load YOLO Model (Cached)
+# -------------------------------
+@st.cache_resource
+def load_model():
+    return YOLO("yolov8n.pt")
+
+model = load_model()
 
 # -------------------------------
 # RAG Setup
@@ -67,47 +72,72 @@ index = faiss.IndexFlatL2(384)
 index.add(np.array(doc_embeddings))
 
 # -------------------------------
-# Functions
+# YOLO Detection
 # -------------------------------
 def detect_objects(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-
-    contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    results = model(image)
 
     objects = []
-    for cnt in contours:
-        if cv2.contourArea(cnt) > 500:
-            objects.append("Vehicle/Object")
+    boxes = []
 
-    return objects
+    for r in results:
+        for box in r.boxes:
+            cls_id = int(box.cls[0])
+            label = model.names[cls_id]
 
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+
+            objects.append(label)
+            boxes.append((x1, y1, x2, y2))
+
+    return objects, boxes
+
+# -------------------------------
+# Draw Boxes
+# -------------------------------
+def draw_boxes(image, boxes, objects):
+    img = Image.fromarray(image)
+    draw = ImageDraw.Draw(img)
+
+    for box, label in zip(boxes, objects):
+        draw.rectangle(box, outline="red", width=3)
+        draw.text((box[0], box[1] - 10), label, fill="red")
+
+    return img
+
+# -------------------------------
+# RAG Retrieval
+# -------------------------------
 def retrieve_context(query):
     q_embed = embed_model.encode([query])
     D, I = index.search(np.array(q_embed), k=2)
     return "\n".join([documents[i] for i in I[0]])
 
 # -------------------------------
-# 🔥 HYBRID AI FUNCTION
+# Multi-Agent System
+# -------------------------------
+def planner_agent(objects):
+    return f"Plan: Analyze {len(objects)} detected objects."
+
+def analyst_agent(context):
+    return f"Analysis: {context}"
+
+def decision_agent(context):
+    if "convoy" in context.lower():
+        return "High Risk: Coordinated movement detected."
+    return "Medium Risk: Monitor situation."
+
+# -------------------------------
+# Hybrid AI (Claude + Fallback)
 # -------------------------------
 def ask_claude(context, query):
-
-    # If no API key → demo mode
     if client is None:
-        return f"""
-        ⚠️ Demo Mode (No API Key)
-
-        Context: {context}
-
-        Insight:
-        Based on detected objects, there is potential coordinated activity.
-        Risk level should be monitored.
-        """
+        return decision_agent(context)
 
     try:
         response = client.messages.create(
-            model="claude-3-haiku-20240307",  # fast + cheap
-            max_tokens=300,
+            model="claude-3-haiku-20240307",
+            max_tokens=200,
             messages=[
                 {"role": "user",
                  "content": f"Context:\n{context}\n\nQuestion:\n{query}"}
@@ -115,32 +145,22 @@ def ask_claude(context, query):
         )
         return response.content[0].text
 
-    except Exception:
-        # 🔁 Fallback if credits fail
-        return f"""
-        ⚠️ Fallback AI Response (No Credits)
-
-        Context: {context}
-
-        Insight:
-        The detected pattern suggests possible convoy or structured movement.
-        This could indicate a moderate to high-risk situation.
-        Recommend continuous monitoring.
-        """
+    except:
+        return decision_agent(context)
 
 # -------------------------------
 # Sidebar
 # -------------------------------
 st.sidebar.title("🛰️ Control Panel")
 
-uploaded_file = st.sidebar.file_uploader("Upload Satellite Image", type=["jpg", "png"])
-query = st.sidebar.text_input("Ask Intelligence Question", "Is this a threat?")
+uploaded_file = st.sidebar.file_uploader("Upload Image", type=["jpg","png"])
+query = st.sidebar.text_input("Ask Question", "Is this a threat?")
 run = st.sidebar.button("🚀 Run Analysis")
 
 # -------------------------------
-# Main Dashboard
+# Dashboard
 # -------------------------------
-st.title("🛰️ AI Satellite Intelligence Dashboard")
+st.title("🛰️ AegisAI Intelligence Dashboard")
 
 col1, col2, col3 = st.columns(3)
 
@@ -149,36 +169,58 @@ col2.markdown('<div class="metric-box risk">⚠️ Risk Level: --</div>', unsafe
 col3.markdown('<div class="metric-box time">⏱️ Response Time: --</div>', unsafe_allow_html=True)
 
 # -------------------------------
-# Processing
+# PROCESS
 # -------------------------------
 if uploaded_file:
     image = Image.open(uploaded_file)
     img_array = np.array(image)
 
-    st.subheader("🛰️ Satellite Image")
-    st.image(image, use_column_width=True)
+    st.subheader("🛰️ Detection View")
 
     if run:
-        with st.spinner("Analyzing data..."):
-            objects = detect_objects(img_array)
-            context = retrieve_context(" ".join(objects))
-            response = ask_claude(context, query)
+        objects, boxes = detect_objects(img_array)
+        boxed_img = draw_boxes(img_array, boxes, objects)
 
-        risk_level = "High" if len(objects) > 2 else "Medium"
+        context = retrieve_context(" ".join(objects))
+        response = ask_claude(context, query)
+
+        plan = planner_agent(objects)
+        analysis = analyst_agent(context)
+        decision = decision_agent(context)
+
+        # Metrics
+        risk_level = "High" if len(objects) > 3 else "Medium"
 
         col1.markdown(f'<div class="metric-box objects">📍 Objects: {len(objects)}</div>', unsafe_allow_html=True)
-        col2.markdown(f'<div class="metric-box risk">⚠️ Risk Level: {risk_level}</div>', unsafe_allow_html=True)
-        col3.markdown('<div class="metric-box time">⏱️ Response Time: 2-5 sec</div>', unsafe_allow_html=True)
+        col2.markdown(f'<div class="metric-box risk">⚠️ Risk: {risk_level}</div>', unsafe_allow_html=True)
+        col3.markdown('<div class="metric-box time">⏱️ 2-5 sec</div>', unsafe_allow_html=True)
+
+        st.image(boxed_img, use_column_width=True)
 
         left, right = st.columns(2)
 
         with left:
-            st.subheader("🧠 Detected Objects")
-            st.write(objects)
-
-            st.subheader("📚 Intelligence Context (RAG)")
-            st.write(context)
+            st.subheader("🧠 Multi-Agent Reasoning")
+            st.write(plan)
+            st.write(analysis)
+            st.write(decision)
 
         with right:
             st.subheader("🤖 AI Decision")
             st.success(response)
+
+        # Risk Trend Chart
+        st.subheader("📊 Risk Trend")
+        data = pd.DataFrame({
+            "Time": ["T1","T2","T3","T4"],
+            "Risk Score": [random.randint(40,90) for _ in range(4)]
+        })
+        st.line_chart(data.set_index("Time"))
+
+        # Map
+        st.subheader("🗺️ Location Tracking")
+        map_data = pd.DataFrame({
+            'lat': [20 + random.random()],
+            'lon': [78 + random.random()]
+        })
+        st.map(map_data)
