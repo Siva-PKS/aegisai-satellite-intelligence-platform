@@ -1,0 +1,7 @@
+streamlit
+opencv-python-headless
+numpy
+pillow
+faiss-cpu
+sentence-transformers
+anthropic
