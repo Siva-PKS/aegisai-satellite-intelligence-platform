@@ -14,14 +14,44 @@ st.set_page_config(page_title="AI Satellite Dashboard", layout="wide")
 # Custom CSS (Palantir style)
 st.markdown("""
 <style>
-body {background-color: #0e1117; color: white;}
-.block-container {padding-top: 1rem;}
+
+/* Background */
+body {
+    background-color: #0e1117;
+    color: white;
+}
+
+/* Metric cards */
 .metric-box {
     background-color: #1c1f26;
     padding: 15px;
     border-radius: 10px;
     text-align: center;
 }
+
+/* 🔥 Buttons (Premium Blue) */
+div.stButton > button {
+    background-color: #2563eb;
+    color: white;
+    border-radius: 10px;
+    border: none;
+    padding: 10px 18px;
+    font-weight: 600;
+    transition: 0.3s;
+}
+
+/* Hover effect */
+div.stButton > button:hover {
+    background-color: #1d4ed8;
+    color: white;
+}
+
+/* Sidebar button fix */
+section[data-testid="stSidebar"] button {
+    background-color: #2563eb !important;
+    color: white !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
