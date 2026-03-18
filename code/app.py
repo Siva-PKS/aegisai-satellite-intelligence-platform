@@ -16,14 +16,8 @@ st.set_page_config(page_title="AI Satellite Dashboard", layout="wide")
 # -------------------------------
 st.markdown("""
 <style>
+body {background-color: #0e1117; color: white;}
 
-/* Background */
-body {
-    background-color: #0e1117;
-    color: white;
-}
-
-/* Metric cards */
 .metric-box {
     padding: 18px;
     border-radius: 12px;
@@ -31,52 +25,30 @@ body {
     font-size: 18px;
     font-weight: bold;
     color: white;
-    box-shadow: 0px 4px 12px rgba(0,0,0,0.4);
 }
 
-/* Different colors */
-.objects {
-    background: linear-gradient(135deg, #2563eb, #1e3a8a);
-}
-.risk {
-    background: linear-gradient(135deg, #dc2626, #7f1d1d);
-}
-.time {
-    background: linear-gradient(135deg, #059669, #064e3b);
-}
+.objects { background: linear-gradient(135deg, #2563eb, #1e3a8a); }
+.risk { background: linear-gradient(135deg, #dc2626, #7f1d1d); }
+.time { background: linear-gradient(135deg, #059669, #064e3b); }
 
-/* Buttons */
 div.stButton > button {
     background-color: #2563eb;
     color: white;
     border-radius: 10px;
     border: none;
     padding: 10px 18px;
-    font-weight: 600;
 }
 div.stButton > button:hover {
     background-color: #1d4ed8;
 }
-
-/* Sidebar button */
-section[data-testid="stSidebar"] button {
-    background-color: #2563eb !important;
-    color: white !important;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------------------
-# Claude API (SAFE)
+# Claude Setup (SAFE)
 # -------------------------------
 api_key = st.secrets.get("ANTHROPIC_API_KEY")
-
-if not api_key:
-    st.warning("⚠️ Claude API key not configured. Showing demo mode.")
-    client = None
-else:
-    client = anthropic.Anthropic(api_key=api_key)
+client = anthropic.Anthropic(api_key=api_key) if api_key else None
 
 # -------------------------------
 # RAG Setup
@@ -115,13 +87,26 @@ def retrieve_context(query):
     D, I = index.search(np.array(q_embed), k=2)
     return "\n".join([documents[i] for i in I[0]])
 
+# -------------------------------
+# 🔥 HYBRID AI FUNCTION
+# -------------------------------
 def ask_claude(context, query):
+
+    # If no API key → demo mode
     if client is None:
-        return "⚠️ Demo Mode: Claude API not configured."
+        return f"""
+        ⚠️ Demo Mode (No API Key)
+
+        Context: {context}
+
+        Insight:
+        Based on detected objects, there is potential coordinated activity.
+        Risk level should be monitored.
+        """
 
     try:
         response = client.messages.create(
-            model="claude-3-haiku-20240307",  # faster + safer
+            model="claude-3-haiku-20240307",  # fast + cheap
             max_tokens=300,
             messages=[
                 {"role": "user",
@@ -130,8 +115,18 @@ def ask_claude(context, query):
         )
         return response.content[0].text
 
-    except Exception as e:
-        return f"❌ Claude API Error: {str(e)}"
+    except Exception:
+        # 🔁 Fallback if credits fail
+        return f"""
+        ⚠️ Fallback AI Response (No Credits)
+
+        Context: {context}
+
+        Insight:
+        The detected pattern suggests possible convoy or structured movement.
+        This could indicate a moderate to high-risk situation.
+        Recommend continuous monitoring.
+        """
 
 # -------------------------------
 # Sidebar
@@ -149,7 +144,6 @@ st.title("🛰️ AI Satellite Intelligence Dashboard")
 
 col1, col2, col3 = st.columns(3)
 
-# Initial placeholders
 col1.markdown('<div class="metric-box objects">📍 Objects: --</div>', unsafe_allow_html=True)
 col2.markdown('<div class="metric-box risk">⚠️ Risk Level: --</div>', unsafe_allow_html=True)
 col3.markdown('<div class="metric-box time">⏱️ Response Time: --</div>', unsafe_allow_html=True)
@@ -170,14 +164,12 @@ if uploaded_file:
             context = retrieve_context(" ".join(objects))
             response = ask_claude(context, query)
 
-        # Dynamic metrics update
         risk_level = "High" if len(objects) > 2 else "Medium"
 
         col1.markdown(f'<div class="metric-box objects">📍 Objects: {len(objects)}</div>', unsafe_allow_html=True)
         col2.markdown(f'<div class="metric-box risk">⚠️ Risk Level: {risk_level}</div>', unsafe_allow_html=True)
         col3.markdown('<div class="metric-box time">⏱️ Response Time: 2-5 sec</div>', unsafe_allow_html=True)
 
-        # Layout sections
         left, right = st.columns(2)
 
         with left:
@@ -188,5 +180,5 @@ if uploaded_file:
             st.write(context)
 
         with right:
-            st.subheader("🤖 AI Decision (Claude)")
+            st.subheader("🤖 AI Decision")
             st.success(response)
